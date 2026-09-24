@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+.env
+.venv/
+venv/
+
+tasks.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+.pytest_cache/
+.mypy_cache/
+.coverage
