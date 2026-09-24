@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 from html import escape
 from http import HTTPStatus
@@ -35,6 +36,7 @@ def icon(name: str) -> str:
         "check": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>',
         "edit": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
         "list": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>',
+        "menu": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>',
         "moon": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 7.5A9 9 0 1 1 12 3Z"/></svg>',
         "plus": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
         "program": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5Z"/></svg>',
@@ -115,6 +117,27 @@ def stats_for_tasks(tasks: list[Task]) -> TaskStats:
     return TaskStats(total=len(tasks), pending=pending, completed=completed)
 
 
+def notification_payload(repository: TaskRepository, selected_date: date) -> dict[str, int | str]:
+    due_today = repository.pending_for_date(selected_date)
+    overdue = repository.pending_before(selected_date)
+    count = len(due_today) + len(overdue)
+    if count == 0:
+        summary = "No pending notifications."
+    elif overdue and due_today:
+        summary = f"{len(overdue)} overdue and {len(due_today)} due today."
+    elif overdue:
+        summary = f"{len(overdue)} overdue task(s)."
+    else:
+        summary = f"{len(due_today)} task(s) due today."
+    return {
+        "date": selected_date.isoformat(),
+        "count": count,
+        "due_today": len(due_today),
+        "overdue": len(overdue),
+        "summary": summary,
+    }
+
+
 def render_category_options(selected_category: str) -> str:
     categories = ["General", "Learn", "Exercise", "Mini-project", "Target"]
     return "\n".join(
@@ -149,7 +172,7 @@ def render_progress(stats: TaskStats) -> str:
 
 def page_heading(page: str) -> str:
     headings = {
-        "dashboard": "Your full tracker overview.",
+        "dashboard": "Dashboard",
         "focus": "Focus on what matters now.",
         "tasks": "Manage tasks.",
         "program": "Plan by day, week, month, or year.",
@@ -185,16 +208,37 @@ def render_sidebar(active_page: str, selected_date: date) -> str:
     """
 
 
-def render_topbar(active_page: str, selected_date: date, scope: str) -> str:
+def render_notification_link(selected_date: date, notification_count: int) -> str:
+    badge_class = "notification-badge"
+    if notification_count == 0:
+        badge_class = f"{badge_class} is-empty"
+    label = f"Notifications, {notification_count} pending"
+    return f"""
+        <a class="top-icon notification-link" href="{page_path("reminders", selected_date)}" title="Notifications" aria-label="{escape(label)}" data-notification-link>
+            {icon("bell")}
+            <span class="{badge_class}" data-notification-count data-count="{notification_count}">{notification_count}</span>
+        </a>
+    """
+
+
+def render_topbar(
+    active_page: str,
+    selected_date: date,
+    scope: str,
+    notification_count: int,
+) -> str:
     action_page = active_page
     scope_input = ""
     if active_page in {"tasks", "program"}:
         scope_input = f'<input type="hidden" name="scope" value="{escape(scope)}">'
     return f"""
         <header class="topbar">
-            <div>
-                <p>Hi, welcome back</p>
-                <h1>{page_heading(active_page)}</h1>
+            <div class="topbar-title">
+                <button class="top-icon menu-toggle" id="menu-toggle" type="button" title="Toggle menu" aria-label="Toggle menu" aria-expanded="true">{icon("menu")}</button>
+                <div>
+                    <p>Hi, welcome back</p>
+                    <h1>{page_heading(active_page)}</h1>
+                </div>
             </div>
             <div class="topbar-actions">
                 <form class="date-filter" method="get" action="/{action_page}">
@@ -203,7 +247,7 @@ def render_topbar(active_page: str, selected_date: date, scope: str) -> str:
                     {scope_input}
                     <button type="submit">{icon("calendar")}View</button>
                 </form>
-                <a class="top-icon" href="{page_path("reminders", selected_date)}" title="Notifications" aria-label="Notifications">{icon("bell")}</a>
+                {render_notification_link(selected_date, notification_count)}
                 <button class="top-icon" id="theme-toggle" type="button" title="Toggle dark mode" aria-label="Toggle dark mode">{icon("moon")}</button>
             </div>
         </header>
@@ -216,6 +260,7 @@ def render_shell(
     scope: str,
     query: dict[str, list[str]],
     content: str,
+    notification_count: int,
 ) -> bytes:
     html = f"""<!doctype html>
 <html lang="en">
@@ -229,20 +274,115 @@ def render_shell(
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+    <script>
+        if (localStorage.getItem("my-task-tracker-sidebar") === "collapsed") {{
+            document.body.classList.add("sidebar-collapsed");
+        }}
+    </script>
     <div class="app-shell">
         {render_sidebar(active_page, selected_date)}
+        <button class="sidebar-overlay" id="sidebar-overlay" type="button" aria-label="Close menu"></button>
         <main class="main-panel">
             {render_notice(query)}
-            {render_topbar(active_page, selected_date, scope)}
+            {render_topbar(active_page, selected_date, scope, notification_count)}
             {content}
         </main>
     </div>
     <script>
         const themeButton = document.getElementById("theme-toggle");
-        themeButton.addEventListener("click", () => {{
+        const menuButton = document.getElementById("menu-toggle");
+        const sidebarOverlay = document.getElementById("sidebar-overlay");
+        const notificationLink = document.querySelector("[data-notification-link]");
+        const notificationBadge = document.querySelector("[data-notification-count]");
+        const dateInput = document.getElementById("date");
+        const mobileMenu = window.matchMedia("(max-width: 900px)");
+
+        const updateMenuButton = () => {{
+            const expanded = mobileMenu.matches
+                ? document.body.classList.contains("sidebar-open")
+                : !document.body.classList.contains("sidebar-collapsed");
+            menuButton.setAttribute("aria-expanded", String(expanded));
+        }};
+
+        const closeMobileMenu = () => {{
+            document.body.classList.remove("sidebar-open");
+            updateMenuButton();
+        }};
+
+        themeButton?.addEventListener("click", () => {{
             const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
             document.documentElement.dataset.theme = nextTheme;
             localStorage.setItem("my-task-tracker-theme", nextTheme);
+        }});
+
+        menuButton?.addEventListener("click", () => {{
+            if (mobileMenu.matches) {{
+                document.body.classList.toggle("sidebar-open");
+            }} else {{
+                document.body.classList.toggle("sidebar-collapsed");
+                const nextState = document.body.classList.contains("sidebar-collapsed") ? "collapsed" : "open";
+                localStorage.setItem("my-task-tracker-sidebar", nextState);
+            }}
+            updateMenuButton();
+        }});
+
+        sidebarOverlay?.addEventListener("click", closeMobileMenu);
+        document.querySelectorAll(".sidebar a").forEach((link) => {{
+            link.addEventListener("click", closeMobileMenu);
+        }});
+        mobileMenu.addEventListener("change", () => {{
+            document.body.classList.remove("sidebar-open");
+            updateMenuButton();
+        }});
+        updateMenuButton();
+
+        let lastNotificationCount = Number(notificationBadge?.dataset.count || 0);
+
+        const updateNotifications = (payload) => {{
+            if (!notificationBadge || !notificationLink) {{
+                return;
+            }}
+            const count = Number(payload.count || 0);
+            notificationBadge.textContent = String(count);
+            notificationBadge.dataset.count = String(count);
+            notificationBadge.classList.toggle("is-empty", count === 0);
+            notificationLink.setAttribute("aria-label", `Notifications, ${{count}} pending`);
+            notificationLink.setAttribute("title", payload.summary || "Notifications");
+            document.title = count > 0 ? `(${{count}}) My Task Tracker` : "My Task Tracker";
+            if (
+                count > lastNotificationCount &&
+                "Notification" in window &&
+                Notification.permission === "granted"
+            ) {{
+                new Notification("My Task Tracker", {{ body: payload.summary || "You have pending tasks." }});
+            }}
+            lastNotificationCount = count;
+        }};
+
+        const refreshNotifications = async () => {{
+            if (!dateInput) {{
+                return;
+            }}
+            const params = new URLSearchParams({{ date: dateInput.value }});
+            try {{
+                const response = await fetch(`/api/notifications?${{params.toString()}}`, {{
+                    headers: {{ "Accept": "application/json" }},
+                    cache: "no-store"
+                }});
+                if (response.ok) {{
+                    updateNotifications(await response.json());
+                }}
+            }} catch (error) {{
+                console.warn("Notification refresh failed", error);
+            }}
+        }};
+
+        refreshNotifications();
+        setInterval(refreshNotifications, 15000);
+        document.addEventListener("visibilitychange", () => {{
+            if (!document.hidden) {{
+                refreshNotifications();
+            }}
         }});
     </script>
 </body>
@@ -550,55 +690,55 @@ def render_reminder_preview(tasks: list[Task], selected_date: date) -> str:
 
 def render_dashboard_page(repository: TaskRepository, selected_date: date) -> str:
     all_tasks = repository.all_tasks()
-    day_tasks = repository.all_for_date(selected_date)
-    day_stats = stats_for_tasks(day_tasks)
+    due_today = repository.pending_for_date(selected_date)
     all_stats = stats_for_tasks(all_tasks)
     overdue_tasks = repository.pending_before(selected_date)
-    upcoming_tasks = repository.pending_from(selected_date, 3)
+    upcoming_candidates = repository.pending_from(selected_date, 8)
+    upcoming_tasks = [
+        task for task in upcoming_candidates if date.fromisoformat(task.due_date) > selected_date
+    ][:3]
     week_start, week_end = week_bounds(selected_date)
     week_stats = stats_for_tasks(repository.between_dates(week_start, week_end))
+    attention_tasks = (overdue_tasks + due_today)[:3]
+    payload = notification_payload(repository, selected_date)
     return f"""
-        <section class="hero-band">
+        <section class="dashboard-intro">
             <div>
-                <h2>My Task Tracker</h2>
-                <p>{escape(safe_date_label(selected_date))} overview</p>
-                <a class="hero-link" href="{page_path("focus", selected_date)}">{icon("list")}Open Focus</a>
+                <p>{escape(safe_date_label(selected_date))}</p>
+                <h2>Professional overview</h2>
             </div>
-            <div class="hero-visual" aria-hidden="true"><span></span><span></span><span></span></div>
+            <a class="secondary-button" href="{page_path("focus", selected_date)}">{icon("list")}Open Focus</a>
         </section>
         {render_metric_grid([
             ("Pending", all_stats.pending, "Open tasks in your tracker"),
-            ("Completed", all_stats.completed, "Finished tasks overall"),
             ("Overdue", len(overdue_tasks), "Pending before this date"),
-            ("Reminder", day_stats.pending, "Pending in the daily digest"),
+            ("Due Today", len(due_today), "Needs attention now"),
+            ("Completed", all_stats.completed, "Finished tasks overall"),
         ])}
-        <section class="dashboard-grid overview-dashboard">
+        <section class="dashboard-clean-grid">
             <div class="panel">
-                <div class="section-title"><div><p>Next actions</p><h2>Upcoming Tasks</h2></div></div>
+                <div class="section-title"><div><p>Priority</p><h2>Needs Attention</h2></div></div>
+                {render_compact_task_list(attention_tasks, selected_date, "dashboard", "day", "Nothing urgent", "No overdue or due-today tasks.")}
+            </div>
+            <div class="panel">
+                <div class="section-title"><div><p>Next</p><h2>Upcoming</h2></div></div>
                 {render_compact_task_list(upcoming_tasks, selected_date, "dashboard", "day", "Nothing pending ahead", "Your upcoming queue is clear.")}
             </div>
-            <div class="panel">
-                <div class="section-title"><div><p>Shortcuts</p><h2>Quick Actions</h2></div></div>
-                {render_quick_actions(selected_date)}
-            </div>
-        </section>
-        <section class="dashboard-grid overview-dashboard">
-            <div class="panel">
-                <div class="section-title"><div><p>{escape(range_label(selected_date, "week"))}</p><h2>Week Progress</h2></div></div>
-                <div class="week-progress-card">
-                    {render_progress(week_stats)}
-                    <p>{week_stats.pending} pending, {week_stats.completed} completed</p>
+            <aside class="panel dashboard-status-panel">
+                <div class="section-title"><div><p>Status</p><h2>Reminder</h2></div></div>
+                <div class="dashboard-reminder">
+                    <strong>{payload["count"]}</strong>
+                    <p>{escape(str(payload["summary"]))}</p>
                 </div>
-                {render_chart(repository, selected_date)}
-            </div>
-            <div class="panel">
-                <div class="section-title"><div><p>{escape(safe_date_label(selected_date))}</p><h2>Reminder Snapshot</h2></div></div>
-                {render_reminder_preview(day_tasks, selected_date)}
-            </div>
-        </section>
-        <section class="panel">
-            <div class="section-title"><div><p>Planning range</p><h2>Day, Week, Month, Year</h2></div></div>
-            {render_range_summary(repository, selected_date)}
+                <div class="week-progress-card compact-progress">
+                    {render_progress(week_stats)}
+                    <p>{week_stats.pending} pending this week</p>
+                </div>
+                <div class="quick-actions compact-actions">
+                    <a class="secondary-button" href="{page_path("tasks", selected_date)}">{icon("plus")}Add Task</a>
+                    <a class="secondary-button" href="{page_path("reminders", selected_date)}">{icon("bell")}Reminders</a>
+                </div>
+            </aside>
         </section>
     """
 
@@ -696,6 +836,7 @@ def render_edit_page(
     scope: str,
     return_page: str,
     query: dict[str, list[str]],
+    notification_count: int,
 ) -> bytes:
     main = f"""
         <section class="edit-panel">
@@ -722,7 +863,7 @@ def render_edit_page(
         </section>
     """
     active_page = return_page if return_page in PAGES else "tasks"
-    return render_shell(active_page, selected_date, scope, query, main)
+    return render_shell(active_page, selected_date, scope, query, main, notification_count)
 
 
 def render_page(
@@ -743,7 +884,8 @@ def render_page(
     else:
         active_page = "dashboard"
         content = render_dashboard_page(repository, selected_date)
-    return render_shell(active_page, selected_date, scope, query, content)
+    payload = notification_payload(repository, selected_date)
+    return render_shell(active_page, selected_date, scope, query, content, int(payload["count"]))
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -753,6 +895,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/static/styles.css":
             self.send_static_file("styles.css", "text/css; charset=utf-8")
+            return
+        if parsed.path == "/api/notifications":
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            selected_date = parse_iso_date(query.get("date", [None])[0])
+            with connect(self.database_path) as connection:
+                repository = TaskRepository(connection)
+                self.send_json(notification_payload(repository, selected_date))
             return
         if parsed.path == "/":
             self.redirect("/dashboard", date=date.today().isoformat())
@@ -781,7 +930,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 except LookupError:
                     self.redirect("/tasks", date=selected_date.isoformat(), notice="Task was not found.")
                     return
-                body = render_edit_page(task, selected_date, scope, return_page, query)
+                payload = notification_payload(repository, selected_date)
+                body = render_edit_page(
+                    task,
+                    selected_date,
+                    scope,
+                    return_page,
+                    query,
+                    int(payload["count"]),
+                )
             self.send_html(body)
             return
 
@@ -933,6 +1090,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def send_html(self, body: bytes) -> None:
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_json(self, payload: dict[str, int | str]) -> None:
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

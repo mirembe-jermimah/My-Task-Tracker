@@ -9,6 +9,7 @@ from task_tracker.database import connect
 from task_tracker.models import COMPLETED, PENDING
 from task_tracker.reminders import DailyReminderService
 from task_tracker.repository import TaskRepository
+from task_tracker.web import notification_payload
 
 
 class MemoryNotifier:
@@ -78,6 +79,18 @@ class TaskRepositoryTests(unittest.TestCase):
         tasks = self.repository.pending_from(date(2026, 9, 23), limit=2)
 
         self.assertEqual([task.id for task in tasks], [first.id, second.id])
+
+    def test_notification_payload_counts_overdue_and_due_today(self) -> None:
+        self.repository.add_task("Review missed lesson", date(2026, 9, 22))
+        self.repository.add_task("Practice functions", date(2026, 9, 23))
+        completed = self.repository.add_task("Finish notes", date(2026, 9, 23))
+        self.repository.mark_completed(completed.id)
+
+        payload = notification_payload(self.repository, date(2026, 9, 23))
+
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual(payload["overdue"], 1)
+        self.assertEqual(payload["due_today"], 1)
 
     def test_mark_completed_updates_status(self) -> None:
         task = self.repository.add_task("Clean task list", date(2026, 9, 23))

@@ -11,6 +11,8 @@
     --amber: #f59bd3;
     --danger: #e84f8a;
     --shadow: 0 18px 50px rgba(160, 54, 151, 0.14);
+    --sidebar-width: 236px;
+    --tap-size: 40px;
 }
 
 :root[data-theme="dark"] {
@@ -33,7 +35,7 @@
 }
 
 html {
-    min-width: 320px;
+    min-width: 0;
 }
 
 body {
@@ -42,6 +44,7 @@ body {
     color: var(--ink);
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     letter-spacing: 0;
+    overflow-x: hidden;
 }
 
 a {
@@ -72,8 +75,12 @@ svg {
 
 .app-shell {
     display: grid;
-    grid-template-columns: 236px minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
     min-height: 100vh;
+}
+
+body.sidebar-collapsed .app-shell {
+    grid-template-columns: 0 minmax(0, 1fr);
 }
 
 .sidebar {
@@ -84,6 +91,19 @@ svg {
     padding: 30px 20px;
     background: var(--surface);
     border-right: 1px solid var(--line);
+    transition: width 180ms ease, padding 180ms ease, transform 180ms ease;
+}
+
+body.sidebar-collapsed .sidebar {
+    width: 0;
+    overflow: hidden;
+    border-right: 0;
+    padding-right: 0;
+    padding-left: 0;
+}
+
+.sidebar-overlay {
+    display: none;
 }
 
 .brand {
@@ -138,6 +158,17 @@ svg {
     margin-bottom: 24px;
 }
 
+.topbar-title {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 12px;
+}
+
+.topbar-title > div {
+    min-width: 0;
+}
+
 .topbar p,
 .section-title p {
     margin: 0 0 4px;
@@ -154,6 +185,7 @@ svg {
 .topbar h1 {
     font-size: 22px;
     line-height: 1.25;
+    overflow-wrap: anywhere;
 }
 
 .topbar-actions {
@@ -226,13 +258,41 @@ button,
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    flex: 0 0 var(--tap-size);
+    width: var(--tap-size);
+    height: var(--tap-size);
     border: 0;
     border-radius: 8px;
     padding: 0;
     background: var(--surface-soft);
     color: var(--accent-strong);
+}
+
+.top-icon {
+    position: relative;
+}
+
+.notification-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 19px;
+    height: 19px;
+    border: 2px solid var(--surface);
+    border-radius: 999px;
+    padding: 0 5px;
+    background: var(--danger);
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.notification-badge.is-empty {
+    display: none;
 }
 
 .icon-button.success {
@@ -251,6 +311,32 @@ button,
     background: rgba(255, 123, 200, 0.12);
     color: var(--accent-strong);
     font-weight: 800;
+}
+
+.dashboard-intro {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 18px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.dashboard-intro p {
+    margin: 0 0 4px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.dashboard-intro h2 {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.2;
 }
 
 .hero-band {
@@ -432,6 +518,12 @@ button,
     gap: 18px;
 }
 
+.dashboard-clean-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 300px;
+    gap: 18px;
+}
+
 .overview-dashboard {
     margin-bottom: 18px;
 }
@@ -452,8 +544,41 @@ button,
     margin-bottom: 16px;
 }
 
+.compact-progress {
+    margin-top: 16px;
+}
+
 .week-progress-card strong {
     color: var(--accent-strong);
+}
+
+.dashboard-status-panel {
+    align-self: start;
+}
+
+.dashboard-reminder {
+    display: grid;
+    gap: 6px;
+    border-radius: 8px;
+    padding: 14px;
+    background: var(--surface-soft);
+}
+
+.dashboard-reminder strong {
+    color: var(--accent-strong);
+    font-size: 34px;
+    line-height: 1;
+}
+
+.dashboard-reminder p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.compact-actions {
+    margin-top: 16px;
 }
 
 .range-summary-grid {
@@ -636,6 +761,7 @@ button,
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 12px;
     min-height: 40px;
     margin-top: 16px;
@@ -655,11 +781,19 @@ button,
 .task-actions {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 8px;
+    max-width: 100%;
 }
 
 .task-actions form {
     margin: 0;
+}
+
+.task-actions .icon-button svg {
+    width: 16px;
+    height: 16px;
 }
 
 .form-panel,
@@ -794,6 +928,10 @@ button,
     box-shadow: 0 12px 28px rgba(52, 33, 79, 0.08);
 }
 
+.program-row .task-actions {
+    min-width: calc((var(--tap-size) * 3) + 16px);
+}
+
 .program-row time {
     color: var(--muted);
     font-size: 12px;
@@ -852,8 +990,12 @@ button,
 }
 
 @media (max-width: 1180px) {
+    :root {
+        --sidebar-width: 190px;
+    }
+
     .app-shell {
-        grid-template-columns: 190px minmax(0, 1fr);
+        grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
     }
 
     .sidebar {
@@ -861,6 +1003,7 @@ button,
     }
 
     .dashboard-grid,
+    .dashboard-clean-grid,
     .management-grid,
     .focus-grid {
         grid-template-columns: 1fr;
@@ -872,19 +1015,52 @@ button,
     }
 }
 
-@media (max-width: 840px) {
+@media (max-width: 900px) {
+    :root {
+        --tap-size: 38px;
+    }
+
     .app-shell {
-        display: grid;
-        grid-template-columns: 164px minmax(0, 1fr);
+        display: block;
     }
 
     .sidebar {
-        position: sticky;
+        position: fixed;
         top: 0;
+        left: 0;
+        z-index: 30;
+        width: min(82vw, 286px);
         height: 100vh;
         border-right: 1px solid var(--line);
         border-bottom: 0;
-        padding: 20px 10px;
+        padding: 24px 16px;
+        box-shadow: var(--shadow);
+        transform: translateX(-105%);
+    }
+
+    body.sidebar-open .sidebar {
+        transform: translateX(0);
+    }
+
+    body.sidebar-collapsed .sidebar {
+        width: min(82vw, 286px);
+        overflow-y: auto;
+        border-right: 1px solid var(--line);
+        padding: 24px 16px;
+    }
+
+    .sidebar-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: rgba(45, 18, 52, 0.24);
+    }
+
+    body.sidebar-open .sidebar-overlay {
+        display: block;
     }
 
     .sidebar nav {
@@ -898,11 +1074,12 @@ button,
     .topbar {
         align-items: stretch;
         flex-direction: column;
+        gap: 14px;
     }
 
     .topbar-actions {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 40px 40px;
+        grid-template-columns: minmax(0, 1fr) var(--tap-size) var(--tap-size);
         align-items: end;
     }
 
@@ -917,6 +1094,7 @@ button,
     }
 
     .hero-band,
+    .dashboard-intro,
     .stats-grid,
     .overview-grid,
     .range-summary-grid,
@@ -944,11 +1122,32 @@ button,
     .date-filter input {
         width: 100%;
     }
+
+    .program-row .task-actions {
+        min-width: 0;
+    }
 }
 
 @media (max-width: 480px) {
+    :root {
+        --tap-size: 36px;
+    }
+
     .hero-band h2 {
         font-size: 28px;
+    }
+
+    .main-panel {
+        padding: 16px 12px;
+    }
+
+    .dashboard-intro {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .dashboard-intro .secondary-button {
+        width: 100%;
     }
 
     .stats-grid article,
@@ -968,5 +1167,50 @@ button,
 
     .compact-task .task-actions {
         justify-content: flex-end;
+    }
+
+    .task-card {
+        padding: 14px;
+    }
+
+    .task-card-footer {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .task-card-footer .task-actions {
+        width: 100%;
+    }
+
+    .form-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .form-actions button,
+    .form-actions .secondary-button {
+        width: 100%;
+    }
+}
+
+@media (max-width: 360px) {
+    :root {
+        --tap-size: 34px;
+    }
+
+    .topbar-actions {
+        gap: 8px;
+    }
+
+    .date-filter {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .date-filter button {
+        width: 100%;
+    }
+
+    .scope-switch {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
