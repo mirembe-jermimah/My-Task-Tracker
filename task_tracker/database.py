@@ -23,6 +23,22 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 CREATE INDEX IF NOT EXISTS idx_tasks_due_status
     ON tasks (due_date, status);
+
+CREATE TABLE IF NOT EXISTS deleted_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_task_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    due_date TEXT NOT NULL,
+    status TEXT NOT NULL,
+    category TEXT NOT NULL,
+    description TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    completed_at TEXT,
+    deleted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_deleted_tasks_deleted_at
+    ON deleted_tasks (deleted_at);
 """
 
 

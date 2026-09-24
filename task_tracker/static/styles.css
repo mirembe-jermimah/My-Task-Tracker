@@ -304,6 +304,11 @@ button,
 }
 
 .notice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
     margin-bottom: 18px;
     border: 1px solid rgba(255, 123, 200, 0.45);
     border-radius: 8px;
@@ -311,6 +316,17 @@ button,
     background: rgba(255, 123, 200, 0.12);
     color: var(--accent-strong);
     font-weight: 800;
+}
+
+.notice form {
+    margin: 0;
+}
+
+.notice-undo {
+    min-height: 34px;
+    padding: 0 12px;
+    background: var(--surface);
+    color: var(--accent-strong);
 }
 
 .dashboard-intro {
@@ -418,6 +434,7 @@ button,
 .form-panel,
 .program-editor,
 .edit-panel,
+.notification-page,
 .reminder-page {
     border: 1px solid var(--line);
     border-radius: 8px;
@@ -528,16 +545,6 @@ button,
     margin-bottom: 18px;
 }
 
-.quick-actions {
-    display: grid;
-    gap: 10px;
-}
-
-.quick-actions .secondary-button {
-    justify-content: flex-start;
-    width: 100%;
-}
-
 .week-progress-card {
     display: grid;
     gap: 10px;
@@ -554,31 +561,6 @@ button,
 
 .dashboard-status-panel {
     align-self: start;
-}
-
-.dashboard-reminder {
-    display: grid;
-    gap: 6px;
-    border-radius: 8px;
-    padding: 14px;
-    background: var(--surface-soft);
-}
-
-.dashboard-reminder strong {
-    color: var(--accent-strong);
-    font-size: 34px;
-    line-height: 1;
-}
-
-.dashboard-reminder p {
-    margin: 0;
-    color: var(--muted);
-    font-size: 13px;
-    font-weight: 800;
-}
-
-.compact-actions {
-    margin-top: 16px;
 }
 
 .range-summary-grid {
@@ -798,6 +780,7 @@ button,
 
 .form-panel,
 .edit-panel,
+.notification-page,
 .reminder-page {
     padding: 18px;
 }
@@ -1156,6 +1139,7 @@ button,
     .form-panel,
     .program-editor,
     .edit-panel,
+    .notification-page,
     .reminder-page {
         box-shadow: none;
     }

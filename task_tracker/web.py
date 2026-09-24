@@ -15,7 +15,7 @@ from .repository import TaskRepository
 
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-PAGES = {"dashboard", "focus", "tasks", "program", "reminders"}
+PAGES = {"dashboard", "focus", "tasks", "program", "notifications", "reminders"}
 PLAN_SCOPES = ("day", "week", "month", "year")
 
 
@@ -157,7 +157,21 @@ def render_notice(query: dict[str, list[str]]) -> str:
     notices = query.get("notice", [])
     if not notices:
         return ""
-    return f'<div class="notice">{escape(notices[0])}</div>'
+    undo_ids = query.get("undo_deleted_id", [])
+    undo_form = ""
+    if undo_ids and undo_ids[0].isdigit():
+        date_value = query.get("date", [date.today().isoformat()])[0]
+        return_page = query.get("return_page", ["tasks"])[0]
+        scope = normalize_scope(query.get("scope", ["day"])[0])
+        undo_form = f"""
+            <form method="post" action="/tasks/deleted/{escape(undo_ids[0])}/restore">
+                <input type="hidden" name="date" value="{escape(date_value)}">
+                <input type="hidden" name="return_page" value="{escape(return_page)}">
+                <input type="hidden" name="scope" value="{escape(scope)}">
+                <button class="notice-undo" type="submit">Undo</button>
+            </form>
+        """
+    return f'<div class="notice"><span>{escape(notices[0])}</span>{undo_form}</div>'
 
 
 def render_progress(stats: TaskStats) -> str:
@@ -176,7 +190,8 @@ def page_heading(page: str) -> str:
         "focus": "Focus on what matters now.",
         "tasks": "Manage tasks.",
         "program": "Plan by day, week, month, or year.",
-        "reminders": "Review reminder notifications.",
+        "notifications": "Live task notifications.",
+        "reminders": "Review reminder previews.",
     }
     return headings.get(page, "My Task Tracker")
 
@@ -187,6 +202,7 @@ def render_sidebar(active_page: str, selected_date: date) -> str:
         ("focus", "Focus"),
         ("tasks", "Tasks"),
         ("program", "Plans"),
+        ("notifications", "Notifications"),
         ("reminders", "Reminders"),
     ]
     links = []
@@ -214,7 +230,7 @@ def render_notification_link(selected_date: date, notification_count: int) -> st
         badge_class = f"{badge_class} is-empty"
     label = f"Notifications, {notification_count} pending"
     return f"""
-        <a class="top-icon notification-link" href="{page_path("reminders", selected_date)}" title="Notifications" aria-label="{escape(label)}" data-notification-link>
+        <a class="top-icon notification-link" href="{page_path("notifications", selected_date)}" title="Notifications" aria-label="{escape(label)}" data-notification-link>
             {icon("bell")}
             <span class="{badge_class}" data-notification-count data-count="{notification_count}">{notification_count}</span>
         </a>
@@ -231,6 +247,8 @@ def render_topbar(
     scope_input = ""
     if active_page in {"tasks", "program"}:
         scope_input = f'<input type="hidden" name="scope" value="{escape(scope)}">'
+    auto_submit = ' data-auto-submit="true"' if active_page == "dashboard" else ""
+    view_button = "" if active_page == "dashboard" else f'<button type="submit">{icon("calendar")}View</button>'
     return f"""
         <header class="topbar">
             <div class="topbar-title">
@@ -241,11 +259,11 @@ def render_topbar(
                 </div>
             </div>
             <div class="topbar-actions">
-                <form class="date-filter" method="get" action="/{action_page}">
+                <form class="date-filter" method="get" action="/{action_page}"{auto_submit}>
                     <label for="date">Date</label>
                     <input id="date" name="date" type="date" value="{selected_date.isoformat()}">
                     {scope_input}
-                    <button type="submit">{icon("calendar")}View</button>
+                    {view_button}
                 </form>
                 {render_notification_link(selected_date, notification_count)}
                 <button class="top-icon" id="theme-toggle" type="button" title="Toggle dark mode" aria-label="Toggle dark mode">{icon("moon")}</button>
@@ -335,6 +353,10 @@ def render_shell(
             updateMenuButton();
         }});
         updateMenuButton();
+
+        document.querySelectorAll("form[data-auto-submit] input[type='date']").forEach((input) => {{
+            input.addEventListener("change", () => input.form?.requestSubmit());
+        }});
 
         let lastNotificationCount = Number(notificationBadge?.dataset.count || 0);
 
@@ -556,16 +578,6 @@ def render_range_summary(repository: TaskRepository, selected_date: date) -> str
     return f'<div class="range-summary-grid">{"".join(cards)}</div>'
 
 
-def render_quick_actions(selected_date: date) -> str:
-    return f"""
-        <div class="quick-actions">
-            <a class="secondary-button" href="{page_path("tasks", selected_date)}">{icon("plus")}Add Task</a>
-            <a class="secondary-button" href="{page_path("program", selected_date, scope="week")}">{icon("program")}Add Plan Item</a>
-            <a class="secondary-button" href="{page_path("reminders", selected_date)}">{icon("bell")}View Reminders</a>
-        </div>
-    """
-
-
 def render_scope_switch(page: str, selected_date: date, active_scope: str) -> str:
     labels = {
         "day": "Day",
@@ -700,14 +712,12 @@ def render_dashboard_page(repository: TaskRepository, selected_date: date) -> st
     week_start, week_end = week_bounds(selected_date)
     week_stats = stats_for_tasks(repository.between_dates(week_start, week_end))
     attention_tasks = (overdue_tasks + due_today)[:3]
-    payload = notification_payload(repository, selected_date)
     return f"""
         <section class="dashboard-intro">
             <div>
                 <p>{escape(safe_date_label(selected_date))}</p>
-                <h2>Professional overview</h2>
+                <h2>Overview</h2>
             </div>
-            <a class="secondary-button" href="{page_path("focus", selected_date)}">{icon("list")}Open Focus</a>
         </section>
         {render_metric_grid([
             ("Pending", all_stats.pending, "Open tasks in your tracker"),
@@ -725,18 +735,10 @@ def render_dashboard_page(repository: TaskRepository, selected_date: date) -> st
                 {render_compact_task_list(upcoming_tasks, selected_date, "dashboard", "day", "Nothing pending ahead", "Your upcoming queue is clear.")}
             </div>
             <aside class="panel dashboard-status-panel">
-                <div class="section-title"><div><p>Status</p><h2>Reminder</h2></div></div>
-                <div class="dashboard-reminder">
-                    <strong>{payload["count"]}</strong>
-                    <p>{escape(str(payload["summary"]))}</p>
-                </div>
+                <div class="section-title"><div><p>This week</p><h2>Progress</h2></div></div>
                 <div class="week-progress-card compact-progress">
                     {render_progress(week_stats)}
                     <p>{week_stats.pending} pending this week</p>
-                </div>
-                <div class="quick-actions compact-actions">
-                    <a class="secondary-button" href="{page_path("tasks", selected_date)}">{icon("plus")}Add Task</a>
-                    <a class="secondary-button" href="{page_path("reminders", selected_date)}">{icon("bell")}Reminders</a>
                 </div>
             </aside>
         </section>
@@ -816,6 +818,32 @@ def render_program_page(repository: TaskRepository, selected_date: date, scope: 
     """
 
 
+def render_notifications_page(repository: TaskRepository, selected_date: date) -> str:
+    payload = notification_payload(repository, selected_date)
+    overdue_tasks = repository.pending_before(selected_date)
+    due_today = repository.pending_for_date(selected_date)
+    return f"""
+        <section class="notification-page">
+            <div class="section-title"><div><p>{escape(safe_date_label(selected_date))}</p><h2>Notifications</h2></div></div>
+            {render_metric_grid([
+                ("Active", payload["count"], str(payload["summary"])),
+                ("Overdue", payload["overdue"], "Pending before this date"),
+                ("Due Today", payload["due_today"], "Pending on this date"),
+            ])}
+            <section class="dashboard-grid overview-dashboard">
+                <div>
+                    <div class="section-title"><div><p>Late</p><h2>Overdue Alerts</h2></div></div>
+                    {render_compact_task_list(overdue_tasks, selected_date, "notifications", "day", "No overdue alerts", "Nothing is overdue for this date.")}
+                </div>
+                <div>
+                    <div class="section-title"><div><p>Today</p><h2>Due Today</h2></div></div>
+                    {render_compact_task_list(due_today, selected_date, "notifications", "day", "No due-today alerts", "No pending tasks are due on this date.")}
+                </div>
+            </section>
+        </section>
+    """
+
+
 def render_reminders_page(repository: TaskRepository, selected_date: date) -> str:
     tasks = repository.all_for_date(selected_date)
     pending_tasks = [task for task in tasks if task.status == PENDING]
@@ -879,6 +907,8 @@ def render_page(
         content = render_tasks_page(repository, selected_date, scope)
     elif active_page == "program":
         content = render_program_page(repository, selected_date, scope)
+    elif active_page == "notifications":
+        content = render_notifications_page(repository, selected_date)
     elif active_page == "reminders":
         content = render_reminders_page(repository, selected_date)
     else:
@@ -960,6 +990,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.create_task(form)
             return
 
+        if parsed.path.startswith("/tasks/deleted/") and parsed.path.endswith("/restore"):
+            deleted_id = self.extract_deleted_task_id(parsed.path)
+            if deleted_id is None:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            self.restore_deleted_task(deleted_id, form)
+            return
+
         if parsed.path.startswith("/tasks/"):
             task_id = self.extract_task_id(parsed.path)
             if task_id is None:
@@ -989,6 +1027,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return None
         try:
             return int(parts[1])
+        except ValueError:
+            return None
+
+    def extract_deleted_task_id(self, path: str) -> int | None:
+        parts = path.strip("/").split("/")
+        if len(parts) != 4 or parts[:2] != ["tasks", "deleted"] or parts[3] != "restore":
+            return None
+        try:
+            return int(parts[2])
         except ValueError:
             return None
 
@@ -1027,12 +1074,27 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def delete_task(self, task_id: int, form: dict[str, str]) -> None:
         selected_date, return_page, scope = self.return_context(form)
+        extra_query = None
         try:
             with connect(self.database_path) as connection:
-                TaskRepository(connection).delete_task(task_id)
+                deleted_id = TaskRepository(connection).archive_deleted_task(task_id)
             notice = "Item deleted."
+            extra_query = {
+                "undo_deleted_id": str(deleted_id),
+                "return_page": return_page,
+            }
         except LookupError:
             notice = "Task was not found."
+        self.redirect_page(return_page, selected_date, notice, scope=scope, extra_query=extra_query)
+
+    def restore_deleted_task(self, deleted_id: int, form: dict[str, str]) -> None:
+        selected_date, return_page, scope = self.return_context(form)
+        try:
+            with connect(self.database_path) as connection:
+                TaskRepository(connection).restore_deleted_task(deleted_id)
+            notice = "Item restored."
+        except LookupError:
+            notice = "Deleted item was not found."
         self.redirect_page(return_page, selected_date, notice, scope=scope)
 
     def update_task(self, task_id: int, form: dict[str, str]) -> None:
@@ -1067,10 +1129,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
         notice: str,
         fragment: str = "",
         scope: str = "day",
+        extra_query: dict[str, str] | None = None,
     ) -> None:
         path = page_path(page if page in PAGES else "tasks", selected_date, scope=scope)
         query_separator = "&" if "?" in path else "?"
-        location = f"{path}{query_separator}{urlencode({'notice': notice})}"
+        query_params = {"notice": notice}
+        if extra_query:
+            query_params.update(extra_query)
+        location = f"{path}{query_separator}{urlencode(query_params)}"
         if fragment:
             location = f"{location}#{fragment}"
         self.send_response(HTTPStatus.SEE_OTHER)

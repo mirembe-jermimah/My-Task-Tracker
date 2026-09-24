@@ -10,11 +10,13 @@ reminder flow that can later run on a schedule.
 - New tasks start with the `Pending` status.
 - Organize tasks with categories and longer descriptions.
 - List pending tasks for today or for a specific date.
-- Edit, complete, and delete tasks or plan items.
+- Edit, complete, delete, and undo accidental deletes for tasks or plan items.
 - View a clean browser app with flexible day, week, month, and year planning.
-- Navigate independent Dashboard, Focus, Tasks, Plans, and Reminders pages.
-- Use the Dashboard for totals, overdue work, reminder status, and range summaries.
+- Navigate independent Dashboard, Focus, Tasks, Plans, Notifications, and Reminders pages.
+- Use the Dashboard for a concise overview of totals, overdue work, and weekly progress.
 - Use Focus for overdue items, selected-day tasks, and the next upcoming work.
+- Use Notifications for live due-today and overdue alerts.
+- Use Reminders for reminder message previews and future reminder delivery setup.
 - Toggle dark mode in the browser dashboard.
 - Generate/send a daily reminder digest through a pluggable notification layer.
 - Uses only the Python standard library.
@@ -66,9 +68,10 @@ http://127.0.0.1:8765/
 ```
 
 The app uses the same SQLite database as the CLI, with a scrollable left sidebar,
-task cards, add forms, edit/delete actions, overview cards, progress charts,
-reminder previews, and dark mode. It also supports categories, descriptions, and
-an editable planning section that can show a day, week, month, or year.
+task cards, add forms, edit/delete/undo actions, overview cards, live
+notifications, reminder previews, and dark mode. It also supports categories,
+descriptions, and an editable planning section that can show a day, week, month,
+or year.
 
 Load the Week 1 Python learning program:
 

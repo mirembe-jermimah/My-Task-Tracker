@@ -126,6 +126,26 @@ class TaskRepositoryTests(unittest.TestCase):
         with self.assertRaises(LookupError):
             self.repository.get_task(task.id)
 
+    def test_archive_deleted_task_can_be_restored(self) -> None:
+        task = self.repository.add_task(
+            "Restore me",
+            date(2026, 9, 14),
+            category="Learn",
+            description="Accidental delete.",
+        )
+
+        deleted_id = self.repository.archive_deleted_task(task.id)
+
+        with self.assertRaises(LookupError):
+            self.repository.get_task(task.id)
+
+        restored = self.repository.restore_deleted_task(deleted_id)
+
+        self.assertEqual(restored.id, task.id)
+        self.assertEqual(restored.title, "Restore me")
+        self.assertEqual(restored.category, "Learn")
+        self.assertEqual(restored.description, "Accidental delete.")
+
     def test_reminder_service_sends_pending_digest(self) -> None:
         self.repository.add_task("Morning review", date(2026, 9, 23))
         notifier = MemoryNotifier()

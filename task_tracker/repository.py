@@ -215,6 +215,120 @@ class TaskRepository:
         if cursor.rowcount == 0:
             raise LookupError(f"No task found with id {task_id}.")
 
+    def archive_deleted_task(self, task_id: int) -> int:
+        task = self.get_task(task_id)
+        cursor = self.connection.execute(
+            """
+            INSERT INTO deleted_tasks (
+                original_task_id,
+                title,
+                due_date,
+                status,
+                category,
+                description,
+                created_at,
+                completed_at,
+                deleted_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                task.id,
+                task.title,
+                task.due_date,
+                task.status,
+                task.category,
+                task.description,
+                task.created_at,
+                task.completed_at,
+                utc_timestamp(),
+            ),
+        )
+        self.connection.execute(
+            """
+            DELETE FROM tasks
+            WHERE id = ?
+            """,
+            (task_id,),
+        )
+        self.connection.commit()
+        return cursor.lastrowid
+
+    def restore_deleted_task(self, deleted_id: int) -> Task:
+        row = self.connection.execute(
+            """
+            SELECT id, original_task_id, title, due_date, status, category, description, created_at, completed_at
+            FROM deleted_tasks
+            WHERE id = ?
+            """,
+            (deleted_id,),
+        ).fetchone()
+        if row is None:
+            raise LookupError(f"No deleted task found with id {deleted_id}.")
+
+        try:
+            cursor = self.connection.execute(
+                """
+                INSERT INTO tasks (
+                    id,
+                    title,
+                    due_date,
+                    status,
+                    category,
+                    description,
+                    created_at,
+                    completed_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["original_task_id"],
+                    row["title"],
+                    row["due_date"],
+                    row["status"],
+                    row["category"],
+                    row["description"],
+                    row["created_at"],
+                    row["completed_at"],
+                ),
+            )
+            restored_id = row["original_task_id"]
+        except sqlite3.IntegrityError:
+            cursor = self.connection.execute(
+                """
+                INSERT INTO tasks (
+                    title,
+                    due_date,
+                    status,
+                    category,
+                    description,
+                    created_at,
+                    completed_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["title"],
+                    row["due_date"],
+                    row["status"],
+                    row["category"],
+                    row["description"],
+                    row["created_at"],
+                    row["completed_at"],
+                ),
+            )
+            restored_id = cursor.lastrowid
+
+        self.connection.execute(
+            """
+            DELETE FROM deleted_tasks
+            WHERE id = ?
+            """,
+            (deleted_id,),
+        )
+        self.connection.commit()
+        return self.get_task(restored_id)
+
     def stats_for_date(self, due_date: date) -> TaskStats:
         row = self.connection.execute(
             """
