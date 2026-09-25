@@ -81,8 +81,14 @@ def week_bounds(selected_date: date) -> tuple[date, date]:
     return week_start, week_start + timedelta(days=6)
 
 
-def normalize_scope(value: str | None) -> str:
-    return value if value in PLAN_SCOPES else "day"
+def normalize_scope(value: str | None, default: str = "day") -> str:
+    fallback = default if default in PLAN_SCOPES else "day"
+    return value if value in PLAN_SCOPES else fallback
+
+
+def page_scope(page: str, value: str | None) -> str:
+    defaults = {"tasks": "month", "program": "week"}
+    return normalize_scope(value, defaults.get(page, "day"))
 
 
 def range_bounds(selected_date: date, scope: str) -> tuple[date, date]:
@@ -188,7 +194,7 @@ def page_heading(page: str) -> str:
     headings = {
         "dashboard": "Dashboard",
         "focus": "Focus on what matters now.",
-        "tasks": "Manage tasks.",
+        "tasks": "Manage Tasks",
         "program": "Plan by day, week, month, or year.",
         "notifications": "Live task notifications.",
         "reminders": "Review reminder previews.",
@@ -208,14 +214,14 @@ def render_sidebar(active_page: str, selected_date: date) -> str:
     links = []
     for page, label in nav_items:
         active = "active" if active_page == page else ""
-        href = page_path(page, selected_date)
+        href = page_path(page)
         links.append(
             f'<a class="{active}" href="{href}">{escape(label)}</a>'
         )
 
     return f"""
         <aside class="sidebar" aria-label="Primary">
-            <a class="brand" href="{page_path("dashboard", selected_date)}">
+            <a class="brand" href="{page_path("dashboard")}">
                 <span class="brand-mark" aria-hidden="true"></span>
                 <strong>My Task Tracker</strong>
             </a>
@@ -224,13 +230,13 @@ def render_sidebar(active_page: str, selected_date: date) -> str:
     """
 
 
-def render_notification_link(selected_date: date, notification_count: int) -> str:
+def render_notification_link(notification_count: int) -> str:
     badge_class = "notification-badge"
     if notification_count == 0:
         badge_class = f"{badge_class} is-empty"
     label = f"Notifications, {notification_count} pending"
     return f"""
-        <a class="top-icon notification-link" href="{page_path("notifications", selected_date)}" title="Notifications" aria-label="{escape(label)}" data-notification-link>
+        <a class="top-icon notification-link" href="{page_path("notifications", date.today())}" title="Notifications" aria-label="{escape(label)}" data-notification-link data-notification-date="{date.today().isoformat()}">
             {icon("bell")}
             <span class="{badge_class}" data-notification-count data-count="{notification_count}">{notification_count}</span>
         </a>
@@ -249,6 +255,7 @@ def render_topbar(
         scope_input = f'<input type="hidden" name="scope" value="{escape(scope)}">'
     auto_submit = ' data-auto-submit="true"' if active_page == "dashboard" else ""
     view_button = "" if active_page == "dashboard" else f'<button type="submit">{icon("calendar")}View</button>'
+    today_link = page_path(active_page, date.today(), scope=scope)
     return f"""
         <header class="topbar">
             <div class="topbar-title">
@@ -260,12 +267,13 @@ def render_topbar(
             </div>
             <div class="topbar-actions">
                 <form class="date-filter" method="get" action="/{action_page}"{auto_submit}>
-                    <label for="date">Date</label>
+                    <label for="date">Viewing date</label>
                     <input id="date" name="date" type="date" value="{selected_date.isoformat()}">
                     {scope_input}
                     {view_button}
+                    <a class="secondary-button date-today" href="{today_link}">Today</a>
                 </form>
-                {render_notification_link(selected_date, notification_count)}
+                {render_notification_link(notification_count)}
                 <button class="top-icon" id="theme-toggle" type="button" title="Toggle dark mode" aria-label="Toggle dark mode">{icon("moon")}</button>
             </div>
         </header>
@@ -385,7 +393,8 @@ def render_shell(
             if (!dateInput) {{
                 return;
             }}
-            const params = new URLSearchParams({{ date: dateInput.value }});
+            const liveDate = notificationLink?.dataset.notificationDate || dateInput.value;
+            const params = new URLSearchParams({{ date: liveDate }});
             try {{
                 const response = await fetch(`/api/notifications?${{params.toString()}}`, {{
                     headers: {{ "Accept": "application/json" }},
@@ -497,7 +506,7 @@ def render_task_grid(
 
 def render_stats_grid(stats: TaskStats) -> str:
     return f"""
-        <section class="stats-grid" aria-label="Daily task stats">
+        <section class="stats-grid" aria-label="Task stats">
             <article><span>Pending</span><strong>{stats.pending}</strong><p>Unfinished tasks</p></article>
             <article><span>Completed</span><strong>{stats.completed}</strong><p>Finished items</p></article>
             <article><span>Progress</span><div class="stat-progress">{render_progress(stats)}</div></article>
@@ -598,7 +607,6 @@ def render_scope_switch(page: str, selected_date: date, active_scope: str) -> st
 
 
 def render_add_task_form(selected_date: date, scope: str) -> str:
-    range_start, range_end = range_bounds(selected_date, scope)
     return f"""
         <form class="form-panel" method="post" action="/tasks">
             <input type="hidden" name="source" value="task">
@@ -610,7 +618,7 @@ def render_add_task_form(selected_date: date, scope: str) -> str:
             <label for="category">Category</label>
             <select id="category" name="category">{render_category_options("General")}</select>
             <label for="due_date">Due date</label>
-            <input id="due_date" name="due_date" type="date" value="{selected_date.isoformat()}" min="{range_start.isoformat()}" max="{range_end.isoformat()}" required>
+            <input id="due_date" name="due_date" type="date" value="{date.today().isoformat()}" required>
             <label for="description">Description</label>
             <textarea id="description" name="description" rows="4" maxlength="500"></textarea>
             <button type="submit">{icon("plus")}Add Task</button>
@@ -619,17 +627,15 @@ def render_add_task_form(selected_date: date, scope: str) -> str:
 
 
 def render_program_form(selected_date: date, scope: str) -> str:
-    range_start, range_end = range_bounds(selected_date, scope)
     return f"""
         <form class="program-editor" method="post" action="/tasks">
             <input type="hidden" name="source" value="program">
             <input type="hidden" name="return_page" value="program">
-            <input type="hidden" name="return_date" value="{selected_date.isoformat()}">
             <input type="hidden" name="scope" value="{escape(scope)}">
             <div class="program-editor-grid">
                 <label for="program_title"><span>Title</span><input id="program_title" name="title" type="text" required maxlength="120"></label>
                 <label for="program_category"><span>Category</span><select id="program_category" name="category">{render_category_options("Learn")}</select></label>
-                <label for="program_due_date"><span>Date</span><input id="program_due_date" name="due_date" type="date" value="{selected_date.isoformat()}" min="{range_start.isoformat()}" max="{range_end.isoformat()}" required></label>
+                <label for="program_due_date"><span>Due date</span><input id="program_due_date" name="due_date" type="date" value="{selected_date.isoformat()}" required></label>
                 <label class="program-description-field" for="program_description"><span>Description</span><textarea id="program_description" name="description" rows="3" maxlength="500"></textarea></label>
                 <button type="submit">{icon("plus")}Add Plan Item</button>
             </div>
@@ -900,7 +906,7 @@ def render_page(
     selected_date: date,
     query: dict[str, list[str]],
 ) -> bytes:
-    scope = normalize_scope(query.get("scope", ["day"])[0])
+    scope = page_scope(active_page, query.get("scope", [None])[0])
     if active_page == "focus":
         content = render_focus_page(repository, selected_date)
     elif active_page == "tasks":
@@ -914,7 +920,7 @@ def render_page(
     else:
         active_page = "dashboard"
         content = render_dashboard_page(repository, selected_date)
-    payload = notification_payload(repository, selected_date)
+    payload = notification_payload(repository, date.today())
     return render_shell(active_page, selected_date, scope, query, content, int(payload["count"]))
 
 
@@ -960,7 +966,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 except LookupError:
                     self.redirect("/tasks", date=selected_date.isoformat(), notice="Task was not found.")
                     return
-                payload = notification_payload(repository, selected_date)
+                payload = notification_payload(repository, date.today())
                 body = render_edit_page(
                     task,
                     selected_date,

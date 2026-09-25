@@ -79,10 +79,11 @@ Load the Week 1 Python learning program:
 python main.py seed-week1 --year 2026
 ```
 
-Then open September 14, 2026 in the dashboard:
+Then open the task manager. It starts with the current month, and you can switch
+between Day, Week, Month, and Year:
 
 ```text
-http://127.0.0.1:8765/?date=2026-09-14
+http://127.0.0.1:8765/tasks
 ```
 
 Inside `Plans`, choose Day, Week, Month, or Year, then add your own items with a

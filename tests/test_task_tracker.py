@@ -9,7 +9,13 @@ from task_tracker.database import connect
 from task_tracker.models import COMPLETED, PENDING
 from task_tracker.reminders import DailyReminderService
 from task_tracker.repository import TaskRepository
-from task_tracker.web import notification_payload
+from task_tracker.web import (
+    notification_payload,
+    page_scope,
+    render_add_task_form,
+    render_program_form,
+    render_sidebar,
+)
 
 
 class MemoryNotifier:
@@ -91,6 +97,34 @@ class TaskRepositoryTests(unittest.TestCase):
         self.assertEqual(payload["count"], 2)
         self.assertEqual(payload["overdue"], 1)
         self.assertEqual(payload["due_today"], 1)
+
+    def test_add_task_form_allows_any_calendar_date(self) -> None:
+        html = render_add_task_form(date(2026, 9, 14), "day")
+
+        self.assertIn('type="date"', html)
+        self.assertIn(f'value="{date.today().isoformat()}"', html)
+        self.assertNotIn(' min="', html)
+        self.assertNotIn(' max="', html)
+
+    def test_program_form_allows_any_calendar_date(self) -> None:
+        html = render_program_form(date(2026, 9, 14), "week")
+
+        self.assertIn('id="program_due_date"', html)
+        self.assertNotIn(' min="', html)
+        self.assertNotIn(' max="', html)
+        self.assertNotIn('name="return_date"', html)
+
+    def test_task_and_plan_pages_have_meaningful_default_ranges(self) -> None:
+        self.assertEqual(page_scope("tasks", None), "month")
+        self.assertEqual(page_scope("program", None), "week")
+        self.assertEqual(page_scope("tasks", "day"), "day")
+
+    def test_sidebar_navigation_does_not_carry_an_old_viewing_date(self) -> None:
+        html = render_sidebar("tasks", date(2026, 9, 14))
+
+        self.assertIn('href="/dashboard"', html)
+        self.assertIn('href="/tasks"', html)
+        self.assertNotIn("2026-09-14", html)
 
     def test_mark_completed_updates_status(self) -> None:
         task = self.repository.add_task("Clean task list", date(2026, 9, 23))

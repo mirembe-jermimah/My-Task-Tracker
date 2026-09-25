@@ -30,6 +30,14 @@
     --shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
 }
 
+:root {
+    color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+}
+
 * {
     box-sizing: border-box;
 }
@@ -198,6 +206,10 @@ body.sidebar-collapsed .sidebar {
     display: flex;
     align-items: end;
     gap: 10px;
+}
+
+.date-today {
+    white-space: nowrap;
 }
 
 .date-filter label,
@@ -1055,21 +1067,38 @@ button,
     }
 
     .topbar {
+        position: relative;
         align-items: stretch;
         flex-direction: column;
         gap: 14px;
     }
 
+    .topbar-title {
+        padding-right: calc((var(--tap-size) * 2) + 20px);
+    }
+
     .topbar-actions {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) var(--tap-size) var(--tap-size);
-        align-items: end;
+        display: block;
     }
 
     .date-filter {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr) auto auto;
         align-items: end;
+    }
+
+    .notification-link,
+    #theme-toggle {
+        position: absolute;
+        top: 0;
+    }
+
+    .notification-link {
+        right: calc(var(--tap-size) + 10px);
+    }
+
+    #theme-toggle {
+        right: 0;
     }
 
     .date-filter label {
@@ -1122,6 +1151,19 @@ button,
 
     .main-panel {
         padding: 16px 12px;
+    }
+
+    .date-filter {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .date-filter input {
+        grid-column: 1 / -1;
+    }
+
+    .date-filter button,
+    .date-today {
+        width: 100%;
     }
 
     .dashboard-intro {
@@ -1184,14 +1226,6 @@ button,
 
     .topbar-actions {
         gap: 8px;
-    }
-
-    .date-filter {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .date-filter button {
-        width: 100%;
     }
 
     .scope-switch {
